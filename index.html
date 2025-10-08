@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Impresión de Código de Barras</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+
+      body {
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f4f6fb;
+      }
+
+      .card {
+        background: #ffffff;
+        width: min(480px, 92vw);
+        padding: 32px 28px;
+        border-radius: 16px;
+        box-shadow: 0 20px 35px rgba(15, 23, 42, 0.15);
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        text-align: center;
+        color: #1f2937;
+      }
+
+      label {
+        font-weight: 600;
+        color: #111827;
+      }
+
+      input[type="text"] {
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-size: 1rem;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      input[type="text"]:focus {
+        outline: none;
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .actions button {
+        padding: 12px 24px;
+        background: #2563eb;
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 1rem;
+        border: none;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background 0.2s ease, transform 0.2s ease;
+      }
+
+      .actions button.secondary {
+        background: #0f172a;
+      }
+
+      .actions button:hover {
+        background: #1d4ed8;
+        transform: translateY(-1px);
+      }
+
+      .actions button.secondary:hover {
+        background: #1e293b;
+      }
+
+      .actions button:active {
+        transform: translateY(0);
+      }
+
+      .actions button:focus-visible {
+        outline: 3px solid #93c5fd;
+        outline-offset: 2px;
+      }
+
+      .preview {
+        border: 1px dashed #d1d5db;
+        border-radius: 12px;
+        padding: 16px;
+        background: #f9fafb;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+      }
+
+      canvas {
+        width: 280px;
+        max-width: 100%;
+        height: auto;
+      }
+
+      .label-text {
+        font-size: 0.8rem;
+        letter-spacing: 0.04em;
+        color: #4b5563;
+      }
+
+      .pdf-preview {
+        display: none;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .pdf-preview.visible {
+        display: flex;
+      }
+
+      .pdf-preview h2 {
+        margin: 0;
+        font-size: 1rem;
+        color: #1f2937;
+        text-align: center;
+      }
+
+      .pdf-preview iframe {
+        width: 100%;
+        min-height: 260px;
+        border: 1px solid #d1d5db;
+        border-radius: 12px;
+        background: #ffffff;
+      }
+
+      .helper {
+        font-size: 0.85rem;
+        color: #6b7280;
+        text-align: center;
+        margin-top: -6px;
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" defer></script>
+    <script defer>
+      window.addEventListener("DOMContentLoaded", () => {
+        const input = document.getElementById("nameInput");
+        const previewButton = document.getElementById("previewButton");
+        const printButton = document.getElementById("printButton");
+        const canvas = document.getElementById("barcodeCanvas");
+        const labelText = document.getElementById("labelText");
+        const context = canvas.getContext("2d");
+        const pdfPreviewSection = document.getElementById("pdfPreviewSection");
+        const pdfPreviewFrame = document.getElementById("pdfPreview");
+        let currentPreviewUrl = null;
+
+        canvas.width = 600;
+        canvas.height = 180;
+
+        const clearCanvas = () => {
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          labelText.textContent = "";
+        };
+
+        const drawPlaceholder = () => {
+          clearCanvas();
+          context.strokeStyle = "#cbd5f5";
+          context.lineWidth = 4;
+          context.strokeRect(40, 40, canvas.width - 80, canvas.height - 80);
+          context.font = "16px sans-serif";
+          context.fillStyle = "#9ca3af";
+          context.textAlign = "center";
+          context.fillText("Tu código de barras aparecerá aquí", canvas.width / 2, canvas.height / 2);
+        };
+
+        const renderBarcode = (value) => {
+          if (!value) {
+            drawPlaceholder();
+            return;
+          }
+
+          try {
+            JsBarcode(canvas, value, {
+              format: "CODE128",
+              displayValue: false,
+              margin: 10,
+              height: 120,
+            });
+            labelText.textContent = value;
+          } catch (error) {
+            clearCanvas();
+            console.error("No se pudo generar el código de barras", error);
+            alert("No se pudo generar el código de barras. Verifica el texto ingresado.");
+          }
+        };
+
+        const createPdf = (value) => {
+          const { jsPDF } = window.jspdf;
+          const pdf = new jsPDF({
+            orientation: "portrait",
+            unit: "mm",
+            format: [48, 30],
+          });
+
+          const pageWidth = pdf.internal.pageSize.getWidth();
+          const pageHeight = pdf.internal.pageSize.getHeight();
+
+          const imgData = canvas.toDataURL("image/png");
+
+          const barcodeMaxWidth = pageWidth - 8; // margen lateral de 4 mm
+          const barcodeMaxHeight = pageHeight - 12; // deja espacio para el texto
+          const ratio = canvas.height === 0 ? 1 : canvas.height / canvas.width;
+          let barcodeWidth = barcodeMaxWidth;
+          let barcodeHeight = barcodeWidth * ratio;
+
+          if (barcodeHeight > barcodeMaxHeight) {
+            barcodeHeight = barcodeMaxHeight;
+            barcodeWidth = barcodeHeight / ratio;
+          }
+
+          const x = (pageWidth - barcodeWidth) / 2;
+          const y = (pageHeight - barcodeHeight) / 2 - 2;
+
+          pdf.addImage(imgData, "PNG", x, Math.max(3, y), barcodeWidth, barcodeHeight);
+
+          pdf.setFontSize(7);
+          pdf.setTextColor(30, 41, 59);
+          pdf.text(value, pageWidth / 2, Math.min(pageHeight - 3, y + barcodeHeight + 5), {
+            align: "center",
+          });
+
+          return pdf;
+        };
+
+        drawPlaceholder();
+
+        input.addEventListener("input", (event) => {
+          const value = event.target.value.trim();
+          renderBarcode(value);
+        });
+
+        previewButton.addEventListener("click", () => {
+          const value = input.value.trim();
+          if (!value) {
+            alert("Por favor ingresa un nombre antes de generar la vista previa.");
+            input.focus();
+            return;
+          }
+
+          renderBarcode(value);
+          const pdf = createPdf(value);
+          const blob = pdf.output("blob");
+
+          if (currentPreviewUrl) {
+            URL.revokeObjectURL(currentPreviewUrl);
+          }
+
+          currentPreviewUrl = URL.createObjectURL(blob);
+          pdfPreviewFrame.src = currentPreviewUrl;
+          pdfPreviewSection.classList.add("visible");
+          pdfPreviewSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+
+        printButton.addEventListener("click", () => {
+          const value = input.value.trim();
+          if (!value) {
+            alert("Por favor ingresa un nombre antes de imprimir.");
+            input.focus();
+            return;
+          }
+
+          renderBarcode(value);
+          const pdf = createPdf(value);
+          pdf.autoPrint({ variant: "non-conform" });
+          window.open(pdf.output("bloburl"), "_blank");
+        });
+
+        window.addEventListener("beforeunload", () => {
+          if (currentPreviewUrl) {
+            URL.revokeObjectURL(currentPreviewUrl);
+          }
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <main class="card">
+      <h1>Imprimir Código de Barras</h1>
+      <p class="helper">
+        Ingresa un nombre y obtén un PDF de 48 mm x 30 mm listo para imprimir.
+      </p>
+      <label for="nameInput">Nombre</label>
+      <input id="nameInput" type="text" placeholder="Ej: Juan Pérez" autocomplete="off" />
+      <div class="actions">
+        <button id="previewButton" type="button" class="secondary">Vista previa PDF</button>
+        <button id="printButton" type="button">Imprimir</button>
+      </div>
+      <section class="preview">
+        <canvas id="barcodeCanvas"></canvas>
+        <span id="labelText" class="label-text"></span>
+      </section>
+      <section id="pdfPreviewSection" class="pdf-preview" aria-live="polite">
+        <h2>Vista previa del PDF</h2>
+        <iframe id="pdfPreview" title="Vista previa de la etiqueta" loading="lazy"></iframe>
+      </section>
+    </main>
+  </body>
+</html>
